@@ -1,0 +1,16 @@
+{
+  "name": "catch-rush",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "admin:create": "node admin/cli.js create",
+    "seed": "node admin/cli.js seed"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "google-auth-library": "^9.14.0",
+    "pg": "^8.13.0"
+  }
+}
