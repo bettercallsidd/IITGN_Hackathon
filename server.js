@@ -10,7 +10,7 @@ const { OAuth2Client } = require('google-auth-library');
 const { DATABASE_URL, SESSION_SECRET, GOOGLE_CLIENT_ID = '', PORT = 3000 } = process.env;
 if (!DATABASE_URL || !SESSION_SECRET) { console.error('Set DATABASE_URL and SESSION_SECRET in .env'); process.exit(1); }
 
-const pool = new Pool({ connectionString: DATABASE_URL });
+const pool = new Pool({ connectionString: DATABASE_URL, max: process.env.VERCEL ? 1 : 10 });
 const google = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 // Signed 30-day session token: base64url(payload).hmac
@@ -38,6 +38,11 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', process.env.TRUST_PROXY === '1');   // set behind a reverse proxy so req.ip / Secure cookies are right
 app.use(express.json({ limit: '50kb' }));
+
+// Schema is ensured once; every request waits for it (needed on Vercel, where there is no long-running listen()).
+const ready = pool.query(require('./admin/schema'));
+ready.catch(() => {});
+app.use((req, res, next) => ready.then(() => next(), e => { console.error('Database connection failed:', e.message); res.status(500).json({ error: 'db' }); }));
 
 app.get('/api/config', (req, res) => res.json({ googleClientId: GOOGLE_CLIENT_ID }));
 
@@ -94,6 +99,8 @@ app.delete('/api/account', auth, handle(async (req, res) => {
 app.use('/admin', require('./admin')(pool));   // developer/owner dashboard (own auth, see admin/README in .env.example)
 app.use(express.static(require('path').join(__dirname, 'public')));
 
-pool.query(require('./admin/schema'))
-  .then(() => app.listen(PORT, () => console.log(`BombDodger on http://localhost:${PORT}`)))
-  .catch(e => { console.error('Database connection failed:', e.message); process.exit(1); });
+module.exports = app;   // Vercel imports this; locally `npm start` listens below
+if (require.main === module) {
+  ready.then(() => app.listen(PORT, () => console.log(`BombDodger on http://localhost:${PORT}`)))
+       .catch(() => process.exit(1));
+}
